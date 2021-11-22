@@ -138,7 +138,7 @@ public class RecordFixer extends OptionalChangeTransformer {
                 }
                 this.node.recordComponents = nodes;
             }
-            if (isRecord && !hasSignature && paramCollector != null) {
+            if (isRecord && !hasSignature && paramCollector != null && !paramCollector.typeParameters.isEmpty()) {
                 // Proguard also strips the Signature attribute, so we have to reconstruct that, to a point where this class is accepted by
                 // javac when on the classpath. This requires every type parameter referenced to have been declared within the class.
                 // Records are implicitly static and have a defined superclass of java/lang/Record, so there can be type parameters in play from:
