@@ -107,7 +107,7 @@ public interface Transformer {
      * @return a factory for a transformer that fixes record class metadata
      */
     public static Factory recordFixerFactory() {
-        return ctx -> RecordFixer.INSTANCE;
+        return ctx -> new RecordFixer(ctx.getDebug(), ctx.getInheritance());
     }
 
     /**

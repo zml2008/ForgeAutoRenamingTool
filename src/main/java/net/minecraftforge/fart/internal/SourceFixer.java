@@ -23,9 +23,15 @@ import net.minecraftforge.fart.api.SourceFixerConfig;
 import org.objectweb.asm.ClassVisitor;
 
 public final class SourceFixer extends OptionalChangeTransformer {
+    private final SourceFixerConfig config;
 
     public SourceFixer(SourceFixerConfig config) {
-        super(parent -> new Fixer(config, parent));
+        this.config = config;
+    }
+
+    @Override
+    protected ClassFixer createFixer(ClassVisitor parent) {
+        return new Fixer(config, parent);
     }
 
     private static class Fixer extends ClassFixer {

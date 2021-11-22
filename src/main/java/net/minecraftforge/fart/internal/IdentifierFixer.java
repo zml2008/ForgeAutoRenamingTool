@@ -28,8 +28,15 @@ import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 
 public final class IdentifierFixer extends OptionalChangeTransformer {
+    private final IdentifierFixerConfig config;
+
     public IdentifierFixer(IdentifierFixerConfig config) {
-        super(parent -> new Fixer(config, parent));
+        this.config = config;
+    }
+
+    @Override
+    protected ClassFixer createFixer(ClassVisitor parent) {
+        return new Fixer(config, parent);
     }
 
     private static class Fixer extends ClassFixer {
