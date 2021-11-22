@@ -22,6 +22,8 @@ package net.minecraftforge.fart.api;
 import java.io.File;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.EnumSet;
+import java.util.Set;
 import java.util.function.Consumer;
 
 import net.minecraftforge.fart.internal.FFLineFixer;
@@ -104,10 +106,27 @@ public interface Transformer {
     /**
      * Create a transformer that restores record component data stripped by ProGuard.
      *
+     * @param flags flags configuring which record fixes to apply
      * @return a factory for a transformer that fixes record class metadata
      */
-    public static Factory recordFixerFactory() {
-        return ctx -> new RecordFixer(ctx.getDebug(), ctx.getInheritance());
+    public static Factory recordFixerFactory(final RecordFixFlag... flags) {
+        if (flags.length == 0) {
+            return recordFixerFactory(RecordFixFlag.all());
+        }
+
+        final Set<RecordFixFlag> flagSet = EnumSet.noneOf(RecordFixFlag.class);
+        Collections.addAll(flagSet, flags);
+        return ctx -> new RecordFixer(ctx.getDebug(), ctx.getInheritance(), flagSet);
+    }
+
+    /**
+     * Create a transformer that restores record component data stripped by ProGuard.
+     *
+     * @param flags flags configuring which record fixes to apply
+     * @return a factory for a transformer that fixes record class metadata
+     */
+    public static Factory recordFixerFactory(final Set<RecordFixFlag> flags) {
+        return ctx -> new RecordFixer(ctx.getDebug(), ctx.getInheritance(), EnumSet.copyOf(flags));
     }
 
     /**

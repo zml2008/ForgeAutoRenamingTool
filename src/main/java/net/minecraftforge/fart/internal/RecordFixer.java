@@ -29,6 +29,7 @@ import java.util.Set;
 import java.util.function.Consumer;
 
 import net.minecraftforge.fart.api.Inheritance;
+import net.minecraftforge.fart.api.RecordFixFlag;
 import org.objectweb.asm.ClassVisitor;
 import org.objectweb.asm.FieldVisitor;
 import org.objectweb.asm.MethodVisitor;
@@ -44,10 +45,12 @@ import org.objectweb.asm.tree.RecordComponentNode;
 public class RecordFixer extends OptionalChangeTransformer {
     private final Consumer<String> debug;
     private final Inheritance inh;
+    private final Set<RecordFixFlag> flags;
 
-    public RecordFixer(final Consumer<String> debug, final Inheritance inh) {
+    public RecordFixer(final Consumer<String> debug, final Inheritance inh, final Set<RecordFixFlag> flags) {
         this.debug = debug;
         this.inh = inh;
+        this.flags = flags;
     }
 
     @Override
@@ -60,7 +63,8 @@ public class RecordFixer extends OptionalChangeTransformer {
         private TypeParameterCollector paramCollector;
         private boolean isRecord;
         private boolean hasRecordComponents;
-        private boolean hasSignature;
+        private boolean patchComponents;
+        private boolean patchSignature;
         private final ClassVisitor originalParent;
         private ClassNode node;
 
@@ -76,7 +80,8 @@ public class RecordFixer extends OptionalChangeTransformer {
                 node = new ClassNode();
                 this.cv = node;
             }
-            this.hasSignature = signature != null;
+            this.patchComponents = flags.contains(RecordFixFlag.COMPONENTS);
+            this.patchSignature = flags.contains(RecordFixFlag.SIGNATURE) && signature == null;
             // todo: validate type parameters from superinterfaces
             // this would need to get signature information from bytecode + runtime classes
             super.visit(version, access, name, signature, superName, interfaces);
@@ -85,7 +90,7 @@ public class RecordFixer extends OptionalChangeTransformer {
         @Override
         public RecordComponentVisitor visitRecordComponent(String name, String descriptor, String signature) {
             this.hasRecordComponents = true;
-            if (signature != null && !hasSignature) { // signature implies non-primitive type
+            if (signature != null && patchSignature) { // signature implies non-primitive type
                 if (paramCollector == null) paramCollector = new TypeParameterCollector();
                 paramCollector.baseType = Type.getType(descriptor);
                 paramCollector.param = TypeParameterCollector.FIELD;
@@ -98,7 +103,7 @@ public class RecordFixer extends OptionalChangeTransformer {
         public FieldVisitor visitField(int access, String name, String descriptor, String signature, Object value) {
             // We want any fields that are final and not static. Proguard sometimes increases the visibility of record component fields to be higher than private.
             // These fields still need to have record components generated, so we need to ignore ACC_PRIVATE.
-            if (isRecord && (access & (Opcodes.ACC_FINAL | Opcodes.ACC_STATIC)) == Opcodes.ACC_FINAL) {
+            if (isRecord && patchComponents && (access & (Opcodes.ACC_FINAL | Opcodes.ACC_STATIC)) == Opcodes.ACC_FINAL) {
                 // Make sure the visibility gets set back to private
                 access = access & ~(Opcodes.ACC_PUBLIC | Opcodes.ACC_PROTECTED) | Opcodes.ACC_PRIVATE;
                 // Manually add the record component back if this class doesn't have any
@@ -106,7 +111,8 @@ public class RecordFixer extends OptionalChangeTransformer {
                     components = new LinkedHashMap<>();
                 components.put(name + descriptor, new RecordComponentNode(name, descriptor, signature));
             }
-            if (isRecord && signature != null && !hasSignature) { // signature implies non-primitive type
+
+            if (isRecord && signature != null && patchSignature) { // signature implies non-primitive type
                 if (paramCollector == null) paramCollector = new TypeParameterCollector();
                 paramCollector.baseType = Type.getType(descriptor);
                 paramCollector.param = TypeParameterCollector.FIELD;
@@ -117,9 +123,10 @@ public class RecordFixer extends OptionalChangeTransformer {
 
         @Override
         public MethodVisitor visitMethod(int access, String name, String descriptor, String signature, String[] exceptions) {
-            if (isRecord && signature != null && !hasSignature) { // signature implies non-primitive type
+            if (isRecord && signature != null && patchSignature) { // signature implies non-primitive type
                 if (paramCollector == null) paramCollector = new TypeParameterCollector();
                 paramCollector.baseType = Type.getType(descriptor);
+                paramCollector.param = TypeParameterCollector.FIELD; // start out before parameters come in
                 new SignatureReader(signature).accept(paramCollector);
                 if (paramCollector.declaredParams != null) {
                     paramCollector.declaredParams.clear();
@@ -138,7 +145,7 @@ public class RecordFixer extends OptionalChangeTransformer {
                 }
                 this.node.recordComponents = nodes;
             }
-            if (isRecord && !hasSignature && paramCollector != null && !paramCollector.typeParameters.isEmpty()) {
+            if (isRecord && patchSignature && paramCollector != null && !paramCollector.typeParameters.isEmpty()) {
                 // Proguard also strips the Signature attribute, so we have to reconstruct that, to a point where this class is accepted by
                 // javac when on the classpath. This requires every type parameter referenced to have been declared within the class.
                 // Records are implicitly static and have a defined superclass of java/lang/Record, so there can be type parameters in play from:
